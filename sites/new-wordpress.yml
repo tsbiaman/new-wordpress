@@ -1,0 +1,41 @@
+site:
+  id: new-wordpress
+  name: "New WordPress"
+
+  # Informational metadata about the source repo
+  github_repo: ""
+  build:
+    context: "."
+    dockerfile: "Dockerfile"
+
+  defaults:
+    branch: main
+    domain_suffix: "tsbi.fun"
+    port: 80
+    replicas: 1
+    resources:
+      backend:
+        cpus: 0.5
+        memory: 512M
+    database: true
+    redis: false
+    database_engine: mariadb
+    wordpress:
+      uploads_volume: true
+      salts_secret: "new-wordpress-salts"
+      wordpress_admin:
+        user: admin
+        email: admin@example.com
+        password_secret: new-wordpress-admin-pass
+
+  environments:
+    production:
+      enabled: true
+      branch: main
+      domain: "new-wordpress.tsbi.fun"  # change to your real domain
+      database: true
+      redis: false
+      database_engine: mariadb
+      wordpress:
+        uploads_volume: true
+        salts_secret: "new-wordpress-salts"
