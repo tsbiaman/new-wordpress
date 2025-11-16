@@ -4,7 +4,7 @@ FROM wordpress:6.4-php8.1-apache
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     curl \
-    netcat \
+    netcat-openbsd \
     default-mysql-client \
     ca-certificates \
   && rm -rf /var/lib/apt/lists/*
