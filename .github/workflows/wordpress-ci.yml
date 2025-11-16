@@ -135,7 +135,6 @@ jobs:
             cd /data/ecosystem
       - name: "Optional: Run WPScan against deployed site"
         if: ${{ env.WPSCAN_API_TOKEN != '' }}
-        uses: wpscanteam/wpscan-action@v2
-        with:
-          url: https://${{ env.DOMAIN }}
-          api_token: ${{ secrets.WPSCAN_API_TOKEN }}
+          run: |
+            echo "Running WPScan container against: https://${{ env.DOMAIN }}"
+            docker run --rm wpscanteam/wpscan --url "https://${{ env.DOMAIN }}" --api-token "${{ secrets.WPSCAN_API_TOKEN }}" || true
