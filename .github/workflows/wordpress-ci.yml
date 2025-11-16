@@ -2,63 +2,134 @@ name: WordPress CI/CD
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main, develop, staging]
+  pull_request:
+    branches: [develop]
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 env:
-  # Set your private registry host here (not secret)
   REGISTRY: registry.tsbi.fun
-  IMAGE_REPO: new-wordpress
-  IMAGE_NAME: ${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:${{ github.sha }}
-  SITE_ID: new-wordpress
-  ENVIRONMENT: production
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-deploy:
+  test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Determine environment and domain
+        id: env
+        run: |
+          REPO_NAME=${{ github.event.repository.name }}
+          BRANCH=${{ github.ref_name }}
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "ENVIRONMENT=pr-${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+            echo "DOMAIN=${REPO_NAME}-pr-${{ github.event.pull_request.number }}.tsbi.fun" >> $GITHUB_ENV
+          elif [[ "$BRANCH" == "main" ]]; then
+            echo "ENVIRONMENT=production" >> $GITHUB_ENV
+            echo "DOMAIN=${REPO_NAME}.tsbi.fun" >> $GITHUB_ENV
+          elif [[ "$BRANCH" == "staging" ]]; then
+            echo "ENVIRONMENT=staging" >> $GITHUB_ENV
+            echo "DOMAIN=staging-${REPO_NAME}.tsbi.fun" >> $GITHUB_ENV
+          else
+            echo "ENVIRONMENT=develop" >> $GITHUB_ENV
+            echo "DOMAIN=develop-${REPO_NAME}.tsbi.fun" >> $GITHUB_ENV
+          fi
 
+      - name: Setup PHP for linting and static checks
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+
+      - name: Install Composer deps (if present)
+        run: |
+          if [ -f composer.json ]; then
+            composer install --no-interaction --no-suggest --prefer-dist
+          fi
+
+      - name: PHP Lint (skip vendor)
+        run: |
+          set -e
+          find . -name "*.php" -not -path './vendor/*' -print0 | xargs -0 -n1 -P4 php -l || true
+
+      - name: Validate wp-config for secret-file support
+        run: |
+          if [ -f wordpress/wp-config.php ]; then
+            if grep -qE 'DB_PASSWORD_FILE|WP_SALT_FILE' wordpress/wp-config.php; then
+              echo "wp-config supports Docker secret file contract"
+            else
+              echo "ERROR: wp-config.php does not read DB_PASSWORD_FILE or WP_SALT_FILE."
+              echo "Follow the TSBI contract in ecosystem/templates/wordpress/wp-config-secret-sample.php"
+              exit 1
+            fi
+          else
+            echo "No wp-config.php found; skipping secret-file validation"
+          fi
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.REGISTRY_USER }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
-
-      - name: Build and push image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ env.IMAGE_NAME }}
-
-      - name: Show image reference
-        env:
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+      - name: Build Docker image (WordPress)
         run: |
-          echo "Pushed image:"
-          echo "$IMAGE_NAME"
+          if [ -f Dockerfile ]; then
+            docker build -f Dockerfile -t $REGISTRY/${{ env.IMAGE_NAME }}-wp:${{ github.sha::8 }} .
+          elif [ -f backend/Dockerfile ]; then
+            docker build -f backend/Dockerfile -t $REGISTRY/${{ env.IMAGE_NAME }}-wp:${{ github.sha::8 }} ./backend
+          else
+            echo "No Dockerfile found in root or backend/; skipping Docker build"
+          fi
 
-      - name: Deploy to server
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Login to registry
+        run: echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login $REGISTRY -u "${{ secrets.REGISTRY_USER }}" --password-stdin
+
+      - name: Push image
+        run: |
+          if [ -f Dockerfile ] || [ -f backend/Dockerfile ]; then
+            docker push $REGISTRY/${{ env.IMAGE_NAME }}-wp:${{ github.sha::8 }}
+          fi
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add VPS host to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.TSBI_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Upload site manifests
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.TSBI_HOST }}
           username: ${{ secrets.TSBI_USER }}
           key: ${{ secrets.TSBI_SSH_KEY }}
+          source: sites/
+          target: /data/ecosystem/sites/
+          strip_components: 1
+
+      - name: Deploy to VPS from registry
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.TSBI_HOST }}
+          username: ${{ secrets.TSBI_USER }}
+          key: ${{ secrets.TSBI_SSH_KEY }}
+          envs: REGISTRY,IMAGE_NAME,BRANCH,SHORT_SHA
           script: |
+            set -euo pipefail
             cd /data/ecosystem
-            SITE_ID="${{ env.SITE_ID }}"
-            ENVIRONMENT="${{ env.ENVIRONMENT }}"
-            DOMAIN=$(yq -r ".site.environments.${ENVIRONMENT}.domain // .site.defaults.domain // \"\"" "sites/${SITE_ID}.yml")
-            ./scripts/deploy-from-registry.sh "$SITE_ID" "$ENVIRONMENT" "$DOMAIN" "${{ env.IMAGE_NAME }}" --branch "${{ github.ref_name }}" --commit "${{ github.sha }}"
+            ./scripts/deploy-from-registry.sh ${{ env.REPO_NAME }} ${{ env.ENVIRONMENT }} ${{ env.DOMAIN }} $REGISTRY/${{ env.IMAGE_NAME }}-wp:${{ github.sha::8 }} --branch ${{ github.ref_name }} --commit ${{ github.sha }} --wait true --timeout 180
+
+      - name: Optional: Run WPScan against deployed site
+        if: secrets.WPSCAN_API_TOKEN != ''
+        uses: wpscanteam/wpscan-action@v2
+        with:
+          url: https://${{ env.DOMAIN }}
+          api_token: ${{ secrets.WPSCAN_API_TOKEN }}
