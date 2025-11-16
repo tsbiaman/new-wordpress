@@ -22,6 +22,7 @@ jobs:
         run: |
           REPO_NAME=${{ github.event.repository.name }}
           BRANCH=${{ github.ref_name }}
+          echo "REPO_NAME=${REPO_NAME}" >> $GITHUB_ENV
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             echo "ENVIRONMENT=pr-${{ github.event.pull_request.number }}" >> $GITHUB_ENV
             echo "DOMAIN=${REPO_NAME}-pr-${{ github.event.pull_request.number }}.tsbi.fun" >> $GITHUB_ENV
@@ -78,9 +79,9 @@ jobs:
       - name: Build Docker image (WordPress)
         run: |
           if [ -f Dockerfile ]; then
-            docker build -f Dockerfile -t $REGISTRY/${{ env.IMAGE_NAME }}-wp:${{ github.sha.substr(0, 8) }} .
+            docker build -f Dockerfile -t $REGISTRY/${{ env.IMAGE_NAME }}-wp:${{ github.sha::8 }} .
           elif [ -f backend/Dockerfile ]; then
-            docker build -f backend/Dockerfile -t $REGISTRY/${{ env.IMAGE_NAME }}-wp:${{ github.sha.substr(0, 8) }} ./backend
+            docker build -f backend/Dockerfile -t $REGISTRY/${{ env.IMAGE_NAME }}-wp:${{ github.sha::8 }} ./backend
           else
             echo "No Dockerfile found in root or backend/; skipping Docker build"
           fi
@@ -91,7 +92,7 @@ jobs:
       - name: Push image
         run: |
           if [ -f Dockerfile ] || [ -f backend/Dockerfile ]; then
-            docker push $REGISTRY/${{ env.IMAGE_NAME }}-wp:${{ github.sha.substr(0, 8) }}
+            docker push $REGISTRY/${{ env.IMAGE_NAME }}-wp:${{ github.sha::8 }}
           fi
 
   deploy:
@@ -125,10 +126,10 @@ jobs:
           script: |
             set -euo pipefail
             cd /data/ecosystem
-            ./scripts/deploy-from-registry.sh ${{ env.REPO_NAME }} ${{ env.ENVIRONMENT }} ${{ env.DOMAIN }} $REGISTRY/${{ env.IMAGE_NAME }}-wp:${{ github.sha.substr(0, 8) }} --branch ${{ github.ref_name }} --commit ${{ github.sha }} --wait true --timeout 180
+            ./scripts/deploy-from-registry.sh ${{ env.REPO_NAME }} ${{ env.ENVIRONMENT }} ${{ env.DOMAIN }} $REGISTRY/${{ env.IMAGE_NAME }}-wp:${{ github.sha::8 }} --branch ${{ github.ref_name }} --commit ${{ github.sha }} --wait true --timeout 180
 
       - name: Optional: Run WPScan against deployed site
-        if: secrets.WPSCAN_API_TOKEN != ''
+        if: ${{ secrets.WPSCAN_API_TOKEN != '' }}
         uses: wpscanteam/wpscan-action@v2
         with:
           url: https://${{ env.DOMAIN }}
