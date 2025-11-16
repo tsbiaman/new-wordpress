@@ -44,7 +44,11 @@ jobs:
           tags: ${{ env.IMAGE_NAME }}
 
       - name: Show image reference
-        run: echo "Pushed image: ${{ env.IMAGE_NAME }}"
+        env:
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+        run: |
+          echo "Pushed image:"
+          echo "$IMAGE_NAME"
 
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.3
