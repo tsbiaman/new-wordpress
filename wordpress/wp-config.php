@@ -55,7 +55,12 @@ define_if_missing('SECURE_AUTH_SALT', 'set-in-WP_SALT_FILE');
 define_if_missing('LOGGED_IN_SALT', 'set-in-WP_SALT_FILE');
 define_if_missing('NONCE_SALT', 'set-in-WP_SALT_FILE');
 
-// 5) Debugging
+// 5) Site URLs (force HTTPS)
+define('WP_HOME', 'https://new-wordpress.tsbi.fun');
+define('WP_SITEURL', 'https://new-wordpress.tsbi.fun');
+define('FORCE_SSL_ADMIN', true);
+
+// 6) Debugging
 // Supports either WORDPRESS_DEBUG or WP_DEBUG env flags
 $wpDebug = getenv('WP_DEBUG');
 if ($wpDebug === false || $wpDebug === '') {
