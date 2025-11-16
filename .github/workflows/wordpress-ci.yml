@@ -139,7 +139,7 @@ jobs:
             cd /data/ecosystem
             ./scripts/deploy-from-registry.sh ${{ env.REPO_NAME }} ${{ env.ENVIRONMENT }} ${{ env.DOMAIN }} $REGISTRY/${{ env.IMAGE_NAME }}-wp:${{ needs.build-and-push.outputs.short_sha }} --branch ${{ github.ref_name }} --commit ${{ github.sha }} --wait true --timeout 180
       - name: "Optional: Run WPScan against deployed site"
-        if: ${{ secrets.WPSCAN_API_TOKEN != '' }}
+        if: ${{ env.WPSCAN_API_TOKEN != '' }}
         run: |
           echo "Running WPScan container against: https://${{ env.DOMAIN }}"
-          docker run --rm wpscanteam/wpscan --url "https://${{ env.DOMAIN }}" --api-token "${{ secrets.WPSCAN_API_TOKEN }}" || true
+          docker run --rm wpscanteam/wpscan --url "https://${{ env.DOMAIN }}" --api-token "${WPSCAN_API_TOKEN}" || true
