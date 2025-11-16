@@ -128,7 +128,7 @@ jobs:
             cd /data/ecosystem
             ./scripts/deploy-from-registry.sh ${{ env.REPO_NAME }} ${{ env.ENVIRONMENT }} ${{ env.DOMAIN }} $REGISTRY/${{ env.IMAGE_NAME }}-wp:${{ github.sha::8 }} --branch ${{ github.ref_name }} --commit ${{ github.sha }} --wait true --timeout 180
 
-      - name: Optional: Run WPScan against deployed site
+      - name: "Optional: Run WPScan against deployed site"
         if: ${{ secrets.WPSCAN_API_TOKEN != '' }}
         uses: wpscanteam/wpscan-action@v2
         with:
