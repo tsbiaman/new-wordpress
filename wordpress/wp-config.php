@@ -60,6 +60,9 @@ define('WP_HOME', 'https://new-wordpress.tsbi.fun');
 define('WP_SITEURL', 'https://new-wordpress.tsbi.fun');
 define('FORCE_SSL_ADMIN', true);
 
+// Force HTTPS for all requests (since Traefik terminates SSL)
+$_SERVER['HTTPS'] = 'on';
+
 // 6) Debugging
 // Supports either WORDPRESS_DEBUG or WP_DEBUG env flags
 $wpDebug = getenv('WP_DEBUG');
