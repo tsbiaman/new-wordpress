@@ -63,7 +63,10 @@ define('FORCE_SSL_ADMIN', true);
 // Force HTTPS for all requests (since Traefik terminates SSL)
 $_SERVER['HTTPS'] = 'on';
 
-// 6) Debugging
+// 6) Filesystem access (avoid FTP prompts)
+define('FS_METHOD', 'direct');
+
+// 7) Debugging
 // Supports either WORDPRESS_DEBUG or WP_DEBUG env flags
 $wpDebug = getenv('WP_DEBUG');
 if ($wpDebug === false || $wpDebug === '') {
