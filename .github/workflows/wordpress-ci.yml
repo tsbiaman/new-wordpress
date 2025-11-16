@@ -1,3 +1,4 @@
+site:
 name: WordPress CI/CD
 
 on:
@@ -20,7 +21,7 @@ jobs:
       - name: Determine environment and domain
         id: env
         run: |
-          REPO_NAME=${{ github.event.repository.name }}
+          REPO_NAME=$(basename "${{ github.repository }}")
           BRANCH=${{ github.ref_name }}
           echo "REPO_NAME=${REPO_NAME}" >> $GITHUB_ENV
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
@@ -112,6 +113,27 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v4
+
+      - name: Determine environment and domain
+        id: env
+        run: |
+          REPO_NAME=$(basename "${{ github.repository }}")
+          BRANCH=${{ github.ref_name }}
+          echo "REPO_NAME=${REPO_NAME}" >> $GITHUB_ENV
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "ENVIRONMENT=pr-${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+            echo "DOMAIN=${REPO_NAME}-pr-${{ github.event.pull_request.number }}.tsbi.fun" >> $GITHUB_ENV
+          elif [[ "$BRANCH" == "main" ]]; then
+            echo "ENVIRONMENT=production" >> $GITHUB_ENV
+            echo "DOMAIN=${REPO_NAME}.tsbi.fun" >> $GITHUB_ENV
+          elif [[ "$BRANCH" == "staging" ]]; then
+            echo "ENVIRONMENT=staging" >> $GITHUB_ENV
+            echo "DOMAIN=staging-${REPO_NAME}.tsbi.fun" >> $GITHUB_ENV
+          else
+            echo "ENVIRONMENT=develop" >> $GITHUB_ENV
+            echo "DOMAIN=develop-${REPO_NAME}.tsbi.fun" >> $GITHUB_ENV
+          fi
+
       - name: Add VPS host to known hosts
         run: |
           mkdir -p ~/.ssh
